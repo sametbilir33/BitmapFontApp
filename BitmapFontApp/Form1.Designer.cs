@@ -51,6 +51,7 @@
             // 
             // panelCanvas
             // 
+            panelCanvas.AutoScroll = true;
             panelCanvas.BackColor = Color.White;
             panelCanvas.Dock = DockStyle.Fill;
             panelCanvas.Location = new Point(3, 53);

@@ -7,38 +7,65 @@ namespace BitmapFontApp
 {
     public partial class Form1 : Form
     {
-        private int pixelSize = 2;
+        private int pixelSize = 4;
+
         private Color textColor = Color.Black;
         private Color backgroundColor = Color.White;
+
         private bool transparentBackground = false;
+
+        private const int FontWidth = 8;
+        private const int PixelFontHeight = 16;
+
+        private const int CanvasPadding = 10;
+        private const int CharacterSpacing = 2;
 
         public Form1()
         {
             InitializeComponent();
+
             SetupEvents();
+
+            pixelSize = (int)numericUpDown1.Value;
+
+            UpdateFormatUI();
             UpdateColorButtonStyles();
         }
 
+        #region Setup
+
         private void SetupEvents()
         {
-            txtInput.TextChanged += (s, e) => panelCanvas.Invalidate();
+            txtInput.TextChanged += (s, e) =>
+            {
+                UpdateCanvasSize();
+                panelCanvas.Invalidate();
+            };
+
+            numericUpDown1.ValueChanged += (s, e) =>
+            {
+                pixelSize = (int)numericUpDown1.Value;
+
+                UpdateCanvasSize();
+                panelCanvas.Invalidate();
+            };
 
             if (comboBox1.Items.Count == 0)
             {
-                comboBox1.Items.AddRange(new string[]
-                {
-            "PNG",
-            "JPG",
-            "JPEG",
-            "BMP",
-            "ICO",
-            "GIF",
-            "TIFF",
-            "SVG",
-            "EPS",
-            "XBM",
-            "WEBP"
-                });
+                comboBox1.Items.AddRange(
+                    new object[]
+                    {
+                        "PNG",
+                        "JPG",
+                        "JPEG",
+                        "BMP",
+                        "ICO",
+                        "GIF",
+                        "TIFF",
+                        "SVG",
+                        "EPS",
+                        "XBM"
+                    });
             }
 
             if (comboBox1.SelectedIndex == -1)
@@ -52,45 +79,157 @@ namespace BitmapFontApp
 
             if (cmbBmpDepth.Items.Count == 0)
             {
-                cmbBmpDepth.Items.AddRange(new object[]
-                {
-            "1-bit (Siyah/Beyaz)",
-            "4-bit (16 Renk)",
-            "8-bit (256 Renk)",
-            "24-bit (True Color)",
-            "32-bit (Alpha)"
-                });
+                cmbBmpDepth.Items.AddRange(
+                    new object[]
+                    {
+                        "1-bit (Siyah/Beyaz)",
+                        "4-bit (16 Renk)",
+                        "8-bit (256 Renk)",
+                        "24-bit (True Color)",
+                        "32-bit (Alpha)"
+                    });
             }
 
-            cmbBmpDepth.SelectedIndex = 3;
-
-            UpdateBmpDepthVisibility();
+            cmbBmpDepth.SelectedIndexChanged +=
+                (s, e) =>
+                {
+                    UpdateFormatUI();
+                    panelCanvas.Invalidate();
+                };
         }
 
-        private void UpdateBmpDepthVisibility()
+        #endregion
+
+        #region Format / UI
+
+        private string GetSelectedExtension()
         {
-            string ext =
-                comboBox1.SelectedItem?
-                .ToString()?
-                .ToLowerInvariant() ?? "";
+            return comboBox1.SelectedItem?
+                       .ToString()?
+                       .ToLowerInvariant()
+                   ?? "png";
+        }
+
+        private int GetSelectedBmpDepth()
+        {
+            return cmbBmpDepth.SelectedIndex switch
+            {
+                0 => 1,
+                1 => 4,
+                2 => 8,
+                3 => 24,
+                4 => 32,
+                _ => 24
+            };
+        }
+
+        private bool FormatSupportsTransparency()
+        {
+            string ext = GetSelectedExtension();
+
+            switch (ext)
+            {
+                case "png":
+                case "ico":
+                case "tiff":
+                case "svg":
+                    return true;
+
+                case "gif":
+                    return true;
+
+                case "bmp":
+                    return GetSelectedBmpDepth() == 32;
+
+                case "eps":
+                    // EPS'te arka plan objesi çizilmeyerek
+                    // transparent görünüm elde edilir.
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        private bool FormatSupportsColors()
+        {
+            string ext = GetSelectedExtension();
+
+            // XBM gerçek anlamda monochrome bitmap'tir.
+            return ext != "xbm";
+        }
+
+        private void UpdateFormatUI()
+        {
+            string ext = GetSelectedExtension();
 
             bool isBmp = ext == "bmp";
 
             lblBmpDepth.Visible = isBmp;
             cmbBmpDepth.Visible = isBmp;
+
+            bool transparencySupported =
+                FormatSupportsTransparency();
+
+            chkTransparent.Enabled =
+                transparencySupported;
+
+            if (!transparencySupported)
+            {
+                if (chkTransparent.Checked)
+                    chkTransparent.Checked = false;
+
+                transparentBackground = false;
+            }
+
+            bool colorsSupported =
+                FormatSupportsColors();
+
+            btnTextColor.Enabled = colorsSupported;
+            btnBgColor.Enabled = colorsSupported;
+
+            if (!colorsSupported)
+            {
+                btnTextColor.Text = "Yazý Rengi";
+                btnBgColor.Text = "Arka Plan";
+            }
+
+            // ICO için aþýrý büyük boyutlarý engelle.
+            if (ext == "ico")
+            {
+                numericUpDown1.Maximum = 8;
+
+                if (numericUpDown1.Value > 8)
+                    numericUpDown1.Value = 8;
+            }
+            else
+            {
+                numericUpDown1.Maximum = 32;
+            }
+
+            UpdateColorButtonStyles();
+            UpdateCanvasSize();
+            panelCanvas.Invalidate();
         }
 
         private void UpdateColorButtonStyles()
         {
             btnTextColor.BackColor = textColor;
-            btnTextColor.ForeColor = GetContrastingColor(textColor);
+            btnTextColor.ForeColor =
+                GetContrastingColor(textColor);
 
             btnBgColor.BackColor = backgroundColor;
-            btnBgColor.ForeColor = GetContrastingColor(backgroundColor);
+            btnBgColor.ForeColor =
+                GetContrastingColor(backgroundColor);
 
-            panelCanvas.BackColor = transparentBackground
-                ? Color.White
-                : backgroundColor;
+            if (transparentBackground)
+            {
+                panelCanvas.BackColor = Color.White;
+            }
+            else
+            {
+                panelCanvas.BackColor = backgroundColor;
+            }
 
             panelCanvas.Invalidate();
         }
@@ -107,55 +246,342 @@ namespace BitmapFontApp
                 : Color.White;
         }
 
-        private void BtnTextColor_Click(object sender, EventArgs e)
-        {
-            using (ColorDialog cd = new ColorDialog())
-            {
-                cd.Color = textColor;
+        #endregion
 
-                if (cd.ShowDialog() == DialogResult.OK)
-                {
-                    textColor = cd.Color;
-                    UpdateColorButtonStyles();
-                }
+        #region Color Events
+
+        private void BtnTextColor_Click(
+            object sender,
+            EventArgs e)
+        {
+            if (!FormatSupportsColors())
+                return;
+
+            using ColorDialog cd = new ColorDialog();
+
+            cd.Color = textColor;
+            cd.FullOpen = true;
+
+            if (cd.ShowDialog() == DialogResult.OK)
+            {
+                textColor = cd.Color;
+                UpdateColorButtonStyles();
             }
         }
 
-        private void BtnBgColor_Click(object sender, EventArgs e)
+        private void BtnBgColor_Click(
+            object sender,
+            EventArgs e)
         {
-            using (ColorDialog cd = new ColorDialog())
-            {
-                cd.Color = backgroundColor;
+            if (!FormatSupportsColors())
+                return;
 
-                if (cd.ShowDialog() == DialogResult.OK)
-                {
-                    backgroundColor = cd.Color;
-                    UpdateColorButtonStyles();
-                }
+            using ColorDialog cd = new ColorDialog();
+
+            cd.Color = backgroundColor;
+            cd.FullOpen = true;
+
+            if (cd.ShowDialog() == DialogResult.OK)
+            {
+                backgroundColor = cd.Color;
+                UpdateColorButtonStyles();
             }
         }
 
-        private void ChkTransparent_CheckedChanged(object sender, EventArgs e)
+        private void ChkTransparent_CheckedChanged(
+            object sender,
+            EventArgs e)
         {
-            transparentBackground = chkTransparent.Checked;
+            if (!FormatSupportsTransparency())
+            {
+                chkTransparent.Checked = false;
+                transparentBackground = false;
+            }
+            else
+            {
+                transparentBackground =
+                    chkTransparent.Checked;
+            }
+
             UpdateColorButtonStyles();
         }
 
-        private void ComboBox1_SelectedIndexChanged(object sender, EventArgs e)
+        private void ComboBox1_SelectedIndexChanged(
+            object sender,
+            EventArgs e)
         {
-            UpdateBmpDepthVisibility();
-
-            panelCanvas.Invalidate();
+            UpdateFormatUI();
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        #endregion
+
+        #region Canvas
+
+        private int CharacterWidth =>
+            FontWidth * pixelSize;
+
+        private int CharacterHeight =>
+            FontHeight * pixelSize;
+
+        private int CharacterAdvance =>
+            CharacterWidth +
+            CharacterSpacing * pixelSize;
+
+        private void UpdateCanvasSize()
+        {
+            if (panelCanvas == null)
+                return;
+
+            string text = txtInput?.Text ?? "";
+
+            if (text.Length == 0)
+            {
+                panelCanvas.AutoScrollMinSize =
+                    new Size(
+                        panelCanvas.ClientSize.Width,
+                        panelCanvas.ClientSize.Height);
+
+                return;
+            }
+
+            Size size =
+                CalculateCanvasSize(text);
+
+            panelCanvas.AutoScrollMinSize =
+                new Size(
+                    Math.Max(
+                        size.Width,
+                        panelCanvas.ClientSize.Width),
+                    Math.Max(
+                        size.Height,
+                        panelCanvas.ClientSize.Height));
+        }
+
+        private Size CalculateCanvasSize(
+            string text)
+        {
+            int width =
+                CanvasPadding * 2;
+
+            int maxWidth = 0;
+            int currentWidth = 0;
+
+            int lineCount = 1;
+
+            foreach (char c in text)
+            {
+                if (c == '\r')
+                    continue;
+
+                if (c == '\n')
+                {
+                    maxWidth =
+                        Math.Max(
+                            maxWidth,
+                            currentWidth);
+
+                    currentWidth = 0;
+                    lineCount++;
+
+                    continue;
+                }
+
+                currentWidth +=
+                    CharacterAdvance;
+            }
+
+            maxWidth =
+                Math.Max(
+                    maxWidth,
+                    currentWidth);
+
+            width += maxWidth;
+
+            int height =
+                CanvasPadding * 2 +
+                (lineCount * CharacterHeight) +
+                ((lineCount - 1) *
+                 5 * pixelSize);
+
+            return new Size(
+                Math.Max(1, width),
+                Math.Max(1, height));
+        }
+
+        private void PanelCanvas_Paint(
+            object sender,
+            PaintEventArgs e)
+        {
+            Graphics g = e.Graphics;
+
+            g.Clear(
+                transparentBackground
+                    ? Color.White
+                    : backgroundColor);
+
+            DrawTextToGraphics(
+                g,
+                txtInput.Text,
+                pixelSize,
+                CanvasPadding,
+                CanvasPadding,
+                false);
+        }
+
+        private void DrawTextToGraphics(
+            Graphics g,
+            string text,
+            int scale,
+            int startX,
+            int startY,
+            bool drawMissingCharacter)
+        {
+            int currentX = startX;
+            int currentY = startY;
+
+            int charWidth =
+                FontWidth * scale;
+
+            int charHeight =
+                FontHeight * scale;
+
+            int spacing =
+                CharacterSpacing * scale;
+
+            using Brush pixelBrush =
+                new SolidBrush(textColor);
+
+            foreach (char c in text)
+            {
+                if (c == '\r')
+                    continue;
+
+                if (c == '\n')
+                {
+                    currentX = startX;
+                    currentY +=
+                        charHeight +
+                        (5 * scale);
+
+                    continue;
+                }
+
+                if (c == ' ')
+                {
+                    currentX +=
+                        charWidth + spacing;
+
+                    continue;
+                }
+
+                byte[,] matrix =
+                    PixelFont.GetCharacter(c);
+
+                if (matrix == null)
+                {
+                    if (drawMissingCharacter)
+                    {
+                        DrawMissingCharacter(
+                            g,
+                            currentX,
+                            currentY,
+                            scale,
+                            pixelBrush);
+                    }
+                }
+                else
+                {
+                    DrawMatrix(
+                        g,
+                        matrix,
+                        currentX,
+                        currentY,
+                        scale,
+                        pixelBrush);
+                }
+
+                currentX +=
+                    charWidth + spacing;
+            }
+        }
+
+        private void DrawMatrix(
+            Graphics g,
+            byte[,] matrix,
+            int x,
+            int y,
+            int scale,
+            Brush brush)
+        {
+            for (int row = 0; row < FontHeight; row++)
+            {
+                for (int col = 0; col < FontWidth; col++)
+                {
+                    if (matrix[row, col] != 1)
+                        continue;
+
+                    g.FillRectangle(
+                        brush,
+                        x + col * scale,
+                        y + row * scale,
+                        scale,
+                        scale);
+                }
+            }
+        }
+
+        private void DrawMissingCharacter(
+            Graphics g,
+            int x,
+            int y,
+            int scale,
+            Brush brush)
+        {
+            int s = scale;
+
+            g.FillRectangle(
+                brush,
+                x,
+                y,
+                s,
+                s);
+
+            g.FillRectangle(
+                brush,
+                x + (6 * s),
+                y,
+                s,
+                s);
+
+            g.FillRectangle(
+                brush,
+                x,
+                y + (15 * s),
+                s,
+                s);
+
+            g.FillRectangle(
+                brush,
+                x + (6 * s),
+                y + (15 * s),
+                s,
+                s);
+        }
+
+        #endregion
+
+        #region Save Selected Character
+
+        private void button1_Click(
+            object sender,
+            EventArgs e)
         {
             string input = txtInput.Text;
 
             if (string.IsNullOrEmpty(input))
             {
                 MessageBox.Show(
-                    "Lütfen kaydetmek için kutuya en az bir karakter yazýn!",
+                    "Lütfen kaydetmek için en az bir karakter yazýn.",
                     "Uyarý",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -168,7 +594,7 @@ namespace BitmapFontApp
             if (!PixelFont.pixelFont.ContainsKey(c))
             {
                 MessageBox.Show(
-                    $"'{c}' karakteri font verisinde bulunamadý!",
+                    $"'{c}' karakteri font verisinde bulunamadý.",
                     "Hata",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -176,52 +602,73 @@ namespace BitmapFontApp
                 return;
             }
 
-            string ext = comboBox1.SelectedItem?.ToString()?.ToLowerInvariant() ?? "png";
+            string ext =
+                GetSelectedExtension();
 
-            if (ext == "webp")
-            {
-                MessageBox.Show(
-                    "System.Drawing doðrudan WebP çýktýsý oluþturamaz. Lütfen PNG, BMP, GIF, TIFF veya baþka bir desteklenen format seçin.",
-                    "Desteklenmeyen Format",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-
+            if (!IsExportFormatSupported(ext))
                 return;
-            }
 
-            string safeFileName = GetSafeFileName(c);
+            string safeFileName =
+                GetSafeFileName(c);
 
-            SaveFileDialog sfd = new SaveFileDialog
-            {
-                FileName = $"{safeFileName}.{ext}",
-                Filter = $"{ext.ToUpperInvariant()} Dosyasý|*.{ext}"
-            };
+            SaveFileDialog sfd =
+                new SaveFileDialog
+                {
+                    FileName =
+                        $"{safeFileName}.{ext}",
+
+                    Filter =
+                        $"{ext.ToUpperInvariant()} Dosyasý|*.{ext}",
+
+                    AddExtension = true,
+                    OverwritePrompt = true
+                };
 
             if (sfd.ShowDialog() != DialogResult.OK)
                 return;
 
-            int scale = (int)numericUpDown1.Value;
-            byte[,] matrix = PixelFont.pixelFont[c];
+            try
+            {
+                int scale =
+                    (int)numericUpDown1.Value;
 
-            ExportCharacterToFile(
-                matrix,
-                ext,
-                scale,
-                sfd.FileName);
+                byte[,] matrix =
+                    PixelFont.pixelFont[c];
 
-            MessageBox.Show(
-                $"Karakter baþarýyla kaydedildi:\n{sfd.FileName}",
-                "Baþarýlý",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                ExportCharacterToFile(
+                    matrix,
+                    ext,
+                    scale,
+                    sfd.FileName);
+
+                MessageBox.Show(
+                    $"Karakter baþarýyla kaydedildi:\n{sfd.FileName}",
+                    "Baþarýlý",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Dosya kaydedilirken hata oluþtu:\n\n{ex.Message}",
+                    "Hata",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        #endregion
+
+        #region Save All Font
+
+        private void button2_Click(
+            object sender,
+            EventArgs e)
         {
             if (PixelFont.pixelFont.Count == 0)
             {
                 MessageBox.Show(
-                    "Kaydedilecek font verisi yok!",
+                    "Kaydedilecek font verisi yok.",
                     "Hata",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Error);
@@ -229,77 +676,100 @@ namespace BitmapFontApp
                 return;
             }
 
-            string ext = comboBox1.SelectedItem?.ToString()?.ToLowerInvariant() ?? "png";
+            string ext =
+                GetSelectedExtension();
 
-            if (ext == "webp")
-            {
-                MessageBox.Show(
-                    "System.Drawing doðrudan WebP çýktýsý oluþturamaz. Lütfen baþka bir format seçin.",
-                    "Desteklenmeyen Format",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-
+            if (!IsExportFormatSupported(ext))
                 return;
-            }
 
-            SaveFileDialog sfd = new SaveFileDialog
-            {
-                FileName = $"PixelFont_All_{ext.ToUpperInvariant()}.zip",
-                Filter = "ZIP Arþivi|*.zip"
-            };
+            SaveFileDialog sfd =
+                new SaveFileDialog
+                {
+                    FileName =
+                        $"PixelFont_All_{ext.ToUpperInvariant()}.zip",
+
+                    Filter =
+                        "ZIP Arþivi|*.zip",
+
+                    AddExtension = true,
+                    OverwritePrompt = true
+                };
 
             if (sfd.ShowDialog() != DialogResult.OK)
                 return;
 
-            int scale = (int)numericUpDown1.Value;
-
-            using (FileStream zipToOpen = new FileStream(
-                sfd.FileName,
-                FileMode.Create,
-                FileAccess.Write))
+            try
             {
-                using (ZipArchive archive = new ZipArchive(
-                    zipToOpen,
-                    ZipArchiveMode.Create))
+                int scale =
+                    (int)numericUpDown1.Value;
+
+                using FileStream zipStream =
+                    new FileStream(
+                        sfd.FileName,
+                        FileMode.Create,
+                        FileAccess.Write);
+
+                using ZipArchive archive =
+                    new ZipArchive(
+                        zipStream,
+                        ZipArchiveMode.Create);
+
+                foreach (var kvp in PixelFont.pixelFont)
                 {
-                    foreach (KeyValuePair<char, byte[,]> kvp in PixelFont.pixelFont)
-                    {
-                        char c = kvp.Key;
-                        byte[,] matrix = kvp.Value;
+                    char c = kvp.Key;
 
-                        string fileNameInZip =
-                            $"{GetSafeFileName(c)}.{ext}";
+                    byte[,] matrix =
+                        kvp.Value;
 
-                        ZipArchiveEntry entry =
-                            archive.CreateEntry(fileNameInZip);
+                    string fileName =
+                        $"{GetSafeFileName(c)}.{ext}";
 
-                        using (Stream entryStream = entry.Open())
-                        {
-                            SaveMatrixToStream(
-                                matrix,
-                                ext,
-                                scale,
-                                entryStream);
-                        }
-                    }
+                    ZipArchiveEntry entry =
+                        archive.CreateEntry(
+                            fileName,
+                            CompressionLevel.Optimal);
+
+                    using Stream entryStream =
+                        entry.Open();
+
+                    SaveMatrixToStream(
+                        matrix,
+                        ext,
+                        scale,
+                        entryStream);
                 }
+
+                MessageBox.Show(
+                    $"Tüm fontlar baþarýyla paketlendi:\n{sfd.FileName}",
+                    "Baþarýlý",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
             }
-
-            MessageBox.Show(
-                $"Tüm fontlar baþarýyla paketlendi:\n{sfd.FileName}",
-                "Baþarýlý",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-        }
-
-        private void button3_Click(object sender, EventArgs e)
-        {
-            string textToDraw = txtInput.Text;
-
-            if (string.IsNullOrEmpty(textToDraw))
+            catch (Exception ex)
             {
                 MessageBox.Show(
-                    "Tuvalde kaydedilecek bir metin yok!",
+                    $"ZIP oluþturulurken hata oluþtu:\n\n{ex.Message}",
+                    "Hata",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
+        }
+
+        #endregion
+
+        #region Export Canvas
+
+        private void button3_Click(
+            object sender,
+            EventArgs e)
+        {
+            string text =
+                txtInput.Text;
+
+            if (string.IsNullOrEmpty(text))
+            {
+                MessageBox.Show(
+                    "Tuvalde kaydedilecek bir metin yok.",
                     "Uyarý",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Warning);
@@ -307,77 +777,124 @@ namespace BitmapFontApp
                 return;
             }
 
-            string ext = comboBox1.SelectedItem?.ToString()?.ToLowerInvariant() ?? "png";
+            string ext =
+                GetSelectedExtension();
 
-            if (ext == "webp")
-            {
-                MessageBox.Show(
-                    "System.Drawing doðrudan WebP çýktýsý oluþturamaz. Lütfen baþka bir format seçin.",
-                    "Desteklenmeyen Format",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-
+            if (!IsExportFormatSupported(ext))
                 return;
-            }
 
-            SaveFileDialog sfd = new SaveFileDialog
-            {
-                FileName = $"Canvas_Render.{ext}",
-                Filter = $"{ext.ToUpperInvariant()} Dosyasý|*.{ext}"
-            };
+            SaveFileDialog sfd =
+                new SaveFileDialog
+                {
+                    FileName =
+                        $"Canvas_Render.{ext}",
+
+                    Filter =
+                        $"{ext.ToUpperInvariant()} Dosyasý|*.{ext}",
+
+                    AddExtension = true,
+                    OverwritePrompt = true
+                };
 
             if (sfd.ShowDialog() != DialogResult.OK)
                 return;
 
-            int scale = (int)numericUpDown1.Value;
-
-            if (ext == "svg")
+            try
             {
-                string svgContent =
-                    GenerateCanvasSVG(textToDraw, scale);
+                int scale =
+                    (int)numericUpDown1.Value;
 
-                File.WriteAllText(
-                    sfd.FileName,
-                    svgContent,
-                    new UTF8Encoding(false));
-            }
-            else if (ext == "eps")
-            {
-                string epsContent =
-                    GenerateCanvasEPS(textToDraw, scale);
-
-                File.WriteAllText(
-                    sfd.FileName,
-                    epsContent,
-                    Encoding.ASCII);
-            }
-            else if (ext == "xbm")
-            {
-                string xbmContent =
-                    GenerateCanvasXBM(textToDraw, scale);
-
-                File.WriteAllText(
-                    sfd.FileName,
-                    xbmContent,
-                    Encoding.ASCII);
-            }
-            else
-            {
-                using (Bitmap bmp = RenderCanvasBitmap(textToDraw, scale))
+                if (ext == "svg")
                 {
+                    File.WriteAllText(
+                        sfd.FileName,
+                        GenerateCanvasSVG(
+                            text,
+                            scale),
+                        new UTF8Encoding(false));
+                }
+                else if (ext == "eps")
+                {
+                    File.WriteAllText(
+                        sfd.FileName,
+                        GenerateCanvasEPS(
+                            text,
+                            scale),
+                        Encoding.ASCII);
+                }
+                else if (ext == "xbm")
+                {
+                    File.WriteAllText(
+                        sfd.FileName,
+                        GenerateCanvasXBM(
+                            text,
+                            scale),
+                        Encoding.ASCII);
+                }
+                else
+                {
+                    using Bitmap bmp =
+                        RenderCanvasBitmap(
+                            text,
+                            scale);
+
                     SaveBitmapToFile(
                         bmp,
                         ext,
                         sfd.FileName);
                 }
-            }
 
-            MessageBox.Show(
-                $"Tuval görüntüsü baþarýyla kaydedildi:\n{sfd.FileName}",
-                "Baþarýlý",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                MessageBox.Show(
+                    $"Tuval görüntüsü baþarýyla kaydedildi:\n{sfd.FileName}",
+                    "Baþarýlý",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Dosya dýþa aktarýlýrken hata oluþtu:\n\n{ex.Message}",
+                    "Hata",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+            }
         }
+
+        #endregion
+
+        #region Export Validation
+
+        private bool IsExportFormatSupported(
+            string ext)
+        {
+            switch (ext)
+            {
+                case "png":
+                case "jpg":
+                case "jpeg":
+                case "bmp":
+                case "ico":
+                case "gif":
+                case "tiff":
+                case "svg":
+                case "eps":
+                case "xbm":
+                    return true;
+
+                default:
+                    MessageBox.Show(
+                        $"'{ext}' formatý desteklenmiyor.",
+                        "Desteklenmeyen Format",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+
+                    return false;
+            }
+        }
+
+        #endregion
+
+        #region Character Rendering
 
         private void ExportCharacterToFile(
             byte[,] matrix,
@@ -385,17 +902,17 @@ namespace BitmapFontApp
             int scale,
             string filePath)
         {
-            using (FileStream fs = new FileStream(
-                filePath,
-                FileMode.Create,
-                FileAccess.Write))
-            {
-                SaveMatrixToStream(
-                    matrix,
-                    ext,
-                    scale,
-                    fs);
-            }
+            using FileStream fs =
+                new FileStream(
+                    filePath,
+                    FileMode.Create,
+                    FileAccess.Write);
+
+            SaveMatrixToStream(
+                matrix,
+                ext,
+                scale,
+                fs);
         }
 
         private void SaveMatrixToStream(
@@ -407,84 +924,155 @@ namespace BitmapFontApp
             switch (ext)
             {
                 case "svg":
-                    {
-                        string svgContent =
-                            GenerateSVG(matrix, scale);
-
-                        byte[] bytes =
-                            Encoding.UTF8.GetBytes(svgContent);
-
-                        targetStream.Write(
-                            bytes,
-                            0,
-                            bytes.Length);
-
-                        break;
-                    }
+                    WriteString(
+                        targetStream,
+                        GenerateSVG(
+                            matrix,
+                            scale),
+                        Encoding.UTF8);
+                    break;
 
                 case "eps":
-                    {
-                        string epsContent =
-                            GenerateEPS(matrix, scale);
-
-                        byte[] bytes =
-                            Encoding.ASCII.GetBytes(epsContent);
-
-                        targetStream.Write(
-                            bytes,
-                            0,
-                            bytes.Length);
-
-                        break;
-                    }
+                    WriteString(
+                        targetStream,
+                        GenerateEPS(
+                            matrix,
+                            scale),
+                        Encoding.ASCII);
+                    break;
 
                 case "xbm":
-                    {
-                        string xbmContent =
-                            GenerateXBM(matrix, scale);
-
-                        byte[] bytes =
-                            Encoding.ASCII.GetBytes(xbmContent);
-
-                        targetStream.Write(
-                            bytes,
-                            0,
-                            bytes.Length);
-
-                        break;
-                    }
+                    WriteString(
+                        targetStream,
+                        GenerateXBM(
+                            matrix,
+                            scale),
+                        Encoding.ASCII);
+                    break;
 
                 default:
+                    using (Bitmap bmp =
+                        RenderCharacterBitmap(
+                            matrix,
+                            scale))
                     {
-                        using (Bitmap bmp =
-                            RenderCharacterBitmap(matrix, scale))
-                        {
-                            SaveBitmapToStream(
-                                bmp,
-                                ext,
-                                targetStream);
-                        }
-
-                        break;
+                        SaveBitmapToStream(
+                            bmp,
+                            ext,
+                            targetStream);
                     }
+
+                    break;
             }
         }
+
+        private void WriteString(
+            Stream stream,
+            string text,
+            Encoding encoding)
+        {
+            byte[] data =
+                encoding.GetBytes(text);
+
+            stream.Write(
+                data,
+                0,
+                data.Length);
+        }
+
+        private Bitmap RenderCharacterBitmap(
+            byte[,] matrix,
+            int scale)
+        {
+            int width =
+                FontWidth * scale;
+
+            int height =
+                FontHeight * scale;
+
+            Bitmap bmp =
+                new Bitmap(
+                    width,
+                    height,
+                    PixelFormat.Format32bppArgb);
+
+            using Graphics g =
+                Graphics.FromImage(bmp);
+
+            g.Clear(
+                transparentBackground
+                    ? Color.Transparent
+                    : backgroundColor);
+
+            using Brush brush =
+                new SolidBrush(textColor);
+
+            DrawMatrix(
+                g,
+                matrix,
+                0,
+                0,
+                scale,
+                brush);
+
+            return bmp;
+        }
+
+        #endregion
+
+        #region Canvas Bitmap
+
+        private Bitmap RenderCanvasBitmap(
+            string text,
+            int scale)
+        {
+            Size canvasSize =
+                CalculateCanvasSize(text);
+
+            Bitmap bmp =
+                new Bitmap(
+                    canvasSize.Width,
+                    canvasSize.Height,
+                    PixelFormat.Format32bppArgb);
+
+            using Graphics g =
+                Graphics.FromImage(bmp);
+
+            g.Clear(
+                transparentBackground
+                    ? Color.Transparent
+                    : backgroundColor);
+
+            DrawTextToGraphics(
+                g,
+                text,
+                scale,
+                CanvasPadding,
+                CanvasPadding,
+                true);
+
+            return bmp;
+        }
+
+        #endregion
+
+        #region Bitmap Saving
 
         private void SaveBitmapToFile(
             Bitmap bmp,
             string ext,
             string filePath)
         {
-            using (FileStream fs = new FileStream(
-                filePath,
-                FileMode.Create,
-                FileAccess.Write))
-            {
-                SaveBitmapToStream(
-                    bmp,
-                    ext,
-                    fs);
-            }
+            using FileStream fs =
+                new FileStream(
+                    filePath,
+                    FileMode.Create,
+                    FileAccess.Write);
+
+            SaveBitmapToStream(
+                bmp,
+                ext,
+                fs);
         }
 
         private void SaveBitmapToStream(
@@ -492,129 +1080,167 @@ namespace BitmapFontApp
             string ext,
             Stream targetStream)
         {
-            if (ext == "ico")
+            switch (ext)
             {
-                IntPtr hIcon = bmp.GetHicon();
+                case "ico":
+                    SaveIco(
+                        bmp,
+                        targetStream);
+                    return;
 
-                try
-                {
-                    using (Icon icon = Icon.FromHandle(hIcon))
-                    {
-                        icon.Save(targetStream);
-                    }
-                }
-                finally
-                {
-                    DestroyIcon(hIcon);
-                }
+                case "bmp":
+                    SaveBmpWithSelectedDepth(
+                        bmp,
+                        targetStream);
+                    return;
 
-                return;
+                case "gif":
+                    SaveGif(
+                        bmp,
+                        targetStream);
+                    return;
             }
 
-            if (ext == "bmp")
-            {
-                SaveBmpWithSelectedDepth(
-                    bmp,
-                    targetStream);
-
-                return;
-            }
-
-            ImageFormat imgFormat =
+            ImageFormat format =
                 GetImageFormat(ext);
+
+            using Bitmap output =
+                PrepareBitmapForFormat(
+                    bmp,
+                    ext);
+
+            output.Save(
+                targetStream,
+                format);
+        }
+
+        private Bitmap PrepareBitmapForFormat(
+            Bitmap source,
+            string ext)
+        {
+            if (ext == "jpg" ||
+                ext == "jpeg")
+            {
+                Bitmap result =
+                    new Bitmap(
+                        source.Width,
+                        source.Height,
+                        PixelFormat.Format24bppRgb);
+
+                using Graphics g =
+                    Graphics.FromImage(result);
+
+                g.Clear(backgroundColor);
+
+                using Bitmap flattened =
+                    FlattenTransparentBitmap(
+                        source,
+                        backgroundColor);
+
+                g.DrawImageUnscaled(
+                    flattened,
+                    0,
+                    0);
+
+                return result;
+            }
+
+            return new Bitmap(
+                source);
+        }
+
+        private Bitmap FlattenTransparentBitmap(
+            Bitmap source,
+            Color background)
+        {
+            Bitmap result =
+                new Bitmap(
+                    source.Width,
+                    source.Height,
+                    PixelFormat.Format32bppArgb);
+
+            using Graphics g =
+                Graphics.FromImage(result);
+
+            g.Clear(background);
+
+            g.DrawImageUnscaled(
+                source,
+                0,
+                0);
+
+            return result;
+        }
+
+        private ImageFormat GetImageFormat(
+            string ext)
+        {
+            return ext.ToLowerInvariant() switch
+            {
+                "jpg" => ImageFormat.Jpeg,
+                "jpeg" => ImageFormat.Jpeg,
+                "bmp" => ImageFormat.Bmp,
+                "gif" => ImageFormat.Gif,
+                "tiff" => ImageFormat.Tiff,
+                "ico" => ImageFormat.Icon,
+                _ => ImageFormat.Png
+            };
+        }
+
+        #endregion
+
+        #region BMP
+
+        private void SaveBmpWithSelectedDepth(
+            Bitmap source,
+            Stream targetStream)
+        {
+            int depth =
+                GetSelectedBmpDepth();
+
+            using Bitmap bmp =
+                ConvertBitmapToBmpDepth(
+                    source,
+                    depth);
 
             bmp.Save(
                 targetStream,
-                imgFormat);
-        }
-
-        private void SaveBmpWithSelectedDepth(
-    Bitmap source,
-    Stream targetStream)
-        {
-            int depth = GetSelectedBmpDepth();
-
-            using (Bitmap bmp =
-                ConvertBitmapToBmpDepth(source, depth))
-            {
-                bmp.Save(
-                    targetStream,
-                    ImageFormat.Bmp);
-            }
-        }
-
-        private int GetSelectedBmpDepth()
-        {
-            switch (cmbBmpDepth.SelectedIndex)
-            {
-                case 0:
-                    return 1;
-
-                case 1:
-                    return 4;
-
-                case 2:
-                    return 8;
-
-                case 3:
-                    return 24;
-
-                case 4:
-                    return 32;
-
-                default:
-                    return 24;
-            }
+                ImageFormat.Bmp);
         }
 
         private Bitmap ConvertBitmapToBmpDepth(
-    Bitmap source,
-    int depth)
+            Bitmap source,
+            int depth)
         {
-            PixelFormat targetPixelFormat;
+            PixelFormat targetFormat =
+                depth switch
+                {
+                    1 =>
+                        PixelFormat.Format1bppIndexed,
 
-            switch (depth)
-            {
-                case 1:
-                    targetPixelFormat =
-                        PixelFormat.Format1bppIndexed;
-                    break;
+                    4 =>
+                        PixelFormat.Format4bppIndexed,
 
-                case 4:
-                    targetPixelFormat =
-                        PixelFormat.Format4bppIndexed;
-                    break;
+                    8 =>
+                        PixelFormat.Format8bppIndexed,
 
-                case 8:
-                    targetPixelFormat =
-                        PixelFormat.Format8bppIndexed;
-                    break;
+                    24 =>
+                        PixelFormat.Format24bppRgb,
 
-                case 24:
-                    targetPixelFormat =
-                        PixelFormat.Format24bppRgb;
-                    break;
+                    32 =>
+                        PixelFormat.Format32bppArgb,
 
-                case 32:
-                    targetPixelFormat =
-                        PixelFormat.Format32bppArgb;
-                    break;
-
-                default:
-                    targetPixelFormat =
-                        PixelFormat.Format24bppRgb;
-                    break;
-            }
+                    _ =>
+                        PixelFormat.Format24bppRgb
+                };
 
             Bitmap result =
                 new Bitmap(
                     source.Width,
                     source.Height,
-                    targetPixelFormat);
+                    targetFormat);
 
-            if (depth == 1 ||
-                depth == 4 ||
-                depth == 8)
+            if (depth <= 8)
             {
                 SetIndexedPalette(
                     result,
@@ -630,31 +1256,29 @@ namespace BitmapFontApp
         }
 
         private void SetIndexedPalette(
-    Bitmap bmp,
-    int depth)
+            Bitmap bmp,
+            int depth)
         {
             ColorPalette palette =
                 bmp.Palette;
 
-            int colorCount =
-                depth == 1 ? 2 :
-                depth == 4 ? 16 :
-                256;
+            int count =
+                depth == 1
+                    ? 2
+                    : depth == 4
+                        ? 16
+                        : 256;
 
-            Color bg =
-                transparentBackground
-                    ? Color.White
-                    : backgroundColor;
+            palette.Entries[0] =
+                backgroundColor;
 
-            Color fg =
+            palette.Entries[1] =
                 textColor;
 
-            // Ýlk iki palette rengi gerçek renkler
-            palette.Entries[0] = bg;
-            palette.Entries[1] = fg;
-
-            // Geri kalan renkleri doldur.
-            for (int i = 2; i < colorCount; i++)
+            // Palette'in kalan bölümlerini doldur.
+            // Font iki renkli olduðu için gerçek pikseller
+            // yalnýzca 0 ve 1 indekslerini kullanýr.
+            for (int i = 2; i < count; i++)
             {
                 int value =
                     (int)(
@@ -662,7 +1286,7 @@ namespace BitmapFontApp
                         (i - 2) /
                         Math.Max(
                             1,
-                            colorCount - 3));
+                            count - 3));
 
                 palette.Entries[i] =
                     Color.FromArgb(
@@ -672,13 +1296,14 @@ namespace BitmapFontApp
                         value);
             }
 
-            bmp.Palette = palette;
+            bmp.Palette =
+                palette;
         }
 
         private unsafe void CopyPixelsToBitmap(
-    Bitmap source,
-    Bitmap destination,
-    int depth)
+            Bitmap source,
+            Bitmap destination,
+            int depth)
         {
             Rectangle rect =
                 new Rectangle(
@@ -696,150 +1321,136 @@ namespace BitmapFontApp
             BitmapData destinationData =
                 destination.LockBits(
                     rect,
-                    ImageLockMode.WriteOnly,
+                    ImageLockMode.ReadWrite,
                     destination.PixelFormat);
 
             try
             {
-                int sourceStride =
-                    sourceData.Stride;
-
-                int destinationStride =
-                    destinationData.Stride;
-
-                int sourceBytesPerPixel = 4;
-
-                for (int y = 0; y < source.Height; y++)
+                for (int y = 0;
+                     y < source.Height;
+                     y++)
                 {
-                    IntPtr sourceRow =
-                        IntPtr.Add(
-                            sourceData.Scan0,
-                            y * sourceStride);
+                    byte* sourceRow =
+                        (byte*)sourceData.Scan0 +
+                        y * sourceData.Stride;
 
-                    IntPtr destinationRow =
-                        IntPtr.Add(
-                            destinationData.Scan0,
-                            y * destinationStride);
+                    byte* destinationRow =
+                        (byte*)destinationData.Scan0 +
+                        y * destinationData.Stride;
 
-                    for (int x = 0; x < source.Width; x++)
+                    for (int x = 0;
+                         x < source.Width;
+                         x++)
                     {
-                        byte* sourcePixel =
-                            (byte*)sourceRow +
-                            (x * sourceBytesPerPixel);
-
-                        byte blue =
-                            sourcePixel[0];
-
-                        byte green =
-                            sourcePixel[1];
-
-                        byte red =
-                            sourcePixel[2];
-
-                        byte alpha =
-                            sourcePixel[3];
+                        byte* src =
+                            sourceRow +
+                            x * 4;
 
                         Color color =
                             Color.FromArgb(
-                                alpha,
-                                red,
-                                green,
-                                blue);
+                                src[3],
+                                src[2],
+                                src[1],
+                                src[0]);
 
-                        if (depth == 32)
+                        switch (depth)
                         {
-                            byte* destinationPixel =
-                                (byte*)destinationRow +
-                                (x * 4);
+                            case 32:
+                                {
+                                    byte* dst =
+                                        destinationRow +
+                                        x * 4;
 
-                            destinationPixel[0] =
-                                blue;
+                                    dst[0] = src[0];
+                                    dst[1] = src[1];
+                                    dst[2] = src[2];
+                                    dst[3] = src[3];
 
-                            destinationPixel[1] =
-                                green;
+                                    break;
+                                }
 
-                            destinationPixel[2] =
-                                red;
+                            case 24:
+                                {
+                                    byte* dst =
+                                        destinationRow +
+                                        x * 3;
 
-                            destinationPixel[3] =
-                                alpha;
-                        }
-                        else if (depth == 24)
-                        {
-                            byte* destinationPixel =
-                                (byte*)destinationRow +
-                                (x * 3);
+                                    dst[0] = src[0];
+                                    dst[1] = src[1];
+                                    dst[2] = src[2];
 
-                            destinationPixel[0] =
-                                blue;
+                                    break;
+                                }
 
-                            destinationPixel[1] =
-                                green;
+                            case 8:
+                                {
+                                    byte* dst =
+                                        destinationRow + x;
 
-                            destinationPixel[2] =
-                                red;
-                        }
-                        else if (depth == 8)
-                        {
-                            byte* destinationPixel =
-                                (byte*)destinationRow +
-                                x;
+                                    dst[0] =
+                                        GetPaletteIndex(
+                                            color,
+                                            8);
 
-                            destinationPixel[0] =
-                                GetPaletteIndex(
-                                    color,
-                                    8);
-                        }
-                        else if (depth == 4)
-                        {
-                            byte* destinationPixel =
-                                (byte*)destinationRow +
-                                (x / 2);
+                                    break;
+                                }
 
-                            byte index =
-                                GetPaletteIndex(
-                                    color,
-                                    4);
+                            case 4:
+                                {
+                                    byte* dst =
+                                        destinationRow +
+                                        (x / 2);
 
-                            if ((x & 1) == 0)
-                            {
-                                destinationPixel[0] =
-                                    (byte)(
-                                        (index << 4) |
-                                        (destinationPixel[0] & 0x0F));
-                            }
-                            else
-                            {
-                                destinationPixel[0] =
-                                    (byte)(
-                                        (destinationPixel[0] & 0xF0) |
-                                        (index & 0x0F));
-                            }
-                        }
-                        else if (depth == 1)
-                        {
-                            byte* destinationPixel =
-                                (byte*)destinationRow +
-                                (x / 8);
+                                    byte index =
+                                        GetPaletteIndex(
+                                            color,
+                                            4);
 
-                            byte index =
-                                GetPaletteIndex(
-                                    color,
-                                    1);
+                                    if ((x & 1) == 0)
+                                    {
+                                        dst[0] =
+                                            (byte)(
+                                                (index << 4) |
+                                                (dst[0] & 0x0F));
+                                    }
+                                    else
+                                    {
+                                        dst[0] =
+                                            (byte)(
+                                                (dst[0] & 0xF0) |
+                                                (index & 0x0F));
+                                    }
 
-                            int bit =
-                                7 - (x % 8);
+                                    break;
+                                }
 
-                            if (index == 1)
-                            {
-                                destinationPixel[0] |=
-                                    (byte)(1 << bit);
-                            }
-                            else
-                            {
-                                destinationPixel[0] &=
-                                    (byte)~(1 << bit);
-                            }
+                            case 1:
+                                {
+                                    byte* dst =
+                                        destinationRow +
+                                        (x / 8);
+
+                                    byte index =
+                                        GetPaletteIndex(
+                                            color,
+                                            1);
+
+                                    int bit =
+                                        7 - (x % 8);
+
+                                    if (index == 1)
+                                    {
+                                        dst[0] |=
+                                            (byte)(1 << bit);
+                                    }
+                                    else
+                                    {
+                                        dst[0] &=
+                                            (byte)~(1 << bit);
+                                    }
+
+                                    break;
+                                }
                         }
                     }
                 }
@@ -852,164 +1463,295 @@ namespace BitmapFontApp
         }
 
         private byte GetPaletteIndex(
-    Color color,
-    int depth)
+            Color color,
+            int depth)
         {
-            Color background =
-                transparentBackground
-                    ? Color.White
-                    : backgroundColor;
+            Color bg =
+                backgroundColor;
 
-            Color text =
+            Color fg =
                 textColor;
 
-            if (depth == 1)
-            {
-                double textDistance =
-                    ColorDistance(
-                        color,
-                        text);
-
-                double backgroundDistance =
-                    ColorDistance(
-                        color,
-                        background);
-
-                return
-                    textDistance <
-                    backgroundDistance
-                        ? (byte)1
-                        : (byte)0;
-            }
-
-            // Fontumuz temel olarak iki renkli olduðu için
-            // text veya background'a en yakýn rengi seçiyoruz.
-            double textDist =
+            double fgDistance =
                 ColorDistance(
                     color,
-                    text);
+                    fg);
 
-            double bgDist =
+            double bgDistance =
                 ColorDistance(
                     color,
-                    background);
+                    bg);
 
-            if (textDist < bgDist)
-                return 1;
-
-            return 0;
+            return fgDistance < bgDistance
+                ? (byte)1
+                : (byte)0;
         }
 
         private double ColorDistance(
-    Color a,
-    Color b)
+            Color a,
+            Color b)
         {
-            double r =
-                a.R - b.R;
-
-            double g =
-                a.G - b.G;
-
-            double bl =
-                a.B - b.B;
-
-            double alpha =
-                a.A - b.A;
+            double r = a.R - b.R;
+            double g = a.G - b.G;
+            double bl = a.B - b.B;
+            double alpha = a.A - b.A;
 
             return
-                (r * r) +
-                (g * g) +
-                (bl * bl) +
-                (alpha * alpha);
+                r * r +
+                g * g +
+                bl * bl +
+                alpha * alpha;
         }
 
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern bool DestroyIcon(IntPtr handle);
+        #endregion
 
-        private Bitmap RenderCharacterBitmap(
-            byte[,] matrix,
-            int scale)
+        #region GIF
+
+        private void SaveGif(
+            Bitmap source,
+            Stream targetStream)
         {
-            int width = 8 * scale;
-            int height = 16 * scale;
-
-            Bitmap bmp = new Bitmap(
-                width,
-                height,
-                PixelFormat.Format32bppArgb);
-
-            using (Graphics g = Graphics.FromImage(bmp))
+            if (!transparentBackground)
             {
-                g.Clear(
-                    transparentBackground
-                        ? Color.Transparent
-                        : backgroundColor);
+                using Bitmap bmp =
+                    new Bitmap(
+                        source.Width,
+                        source.Height,
+                        PixelFormat.Format24bppRgb);
 
-                using (Brush brush =
-                    new SolidBrush(textColor))
+                using Graphics g =
+                    Graphics.FromImage(bmp);
+
+                g.Clear(backgroundColor);
+                g.DrawImageUnscaled(source, 0, 0);
+
+                bmp.Save(
+                    targetStream,
+                    ImageFormat.Gif);
+
+                return;
+            }
+
+            using Bitmap indexed =
+                CreateTransparentGifBitmap(source);
+
+            indexed.Save(
+                targetStream,
+                ImageFormat.Gif);
+        }
+
+        private unsafe Bitmap CreateTransparentGifBitmap(
+            Bitmap source)
+        {
+            Bitmap result =
+                new Bitmap(
+                    source.Width,
+                    source.Height,
+                    PixelFormat.Format8bppIndexed);
+
+            ColorPalette palette =
+                result.Palette;
+
+            palette.Entries[0] =
+                Color.FromArgb(
+                    0,
+                    255,
+                    255,
+                    255);
+
+            palette.Entries[1] =
+                Color.FromArgb(
+                    255,
+                    textColor.R,
+                    textColor.G,
+                    textColor.B);
+
+            for (int i = 2;
+                 i < palette.Entries.Length;
+                 i++)
+            {
+                palette.Entries[i] =
+                    Color.FromArgb(
+                        255,
+                        i,
+                        i,
+                        i);
+            }
+
+            result.Palette =
+                palette;
+
+            Rectangle rect =
+                new Rectangle(
+                    0,
+                    0,
+                    result.Width,
+                    result.Height);
+
+            BitmapData sourceData =
+                source.LockBits(
+                    rect,
+                    ImageLockMode.ReadOnly,
+                    PixelFormat.Format32bppArgb);
+
+            BitmapData destinationData =
+                result.LockBits(
+                    rect,
+                    ImageLockMode.WriteOnly,
+                    PixelFormat.Format8bppIndexed);
+
+            try
+            {
+                for (int y = 0;
+                     y < result.Height;
+                     y++)
                 {
-                    for (int r = 0; r < 16; r++)
+                    byte* src = (byte*)sourceData.Scan0 + y * sourceData.Stride;
+
+                    byte* dst = (byte*)destinationData.Scan0 + y * destinationData.Stride;
+
+                    for (int x = 0;
+                         x < result.Width;
+                         x++)
                     {
-                        for (int col = 0; col < 8; col++)
-                        {
-                            if (matrix[r, col] == 1)
-                            {
-                                g.FillRectangle(
-                                    brush,
-                                    col * scale,
-                                    r * scale,
-                                    scale,
-                                    scale);
-                            }
-                        }
+                        byte alpha =
+                            src[x * 4 + 3];
+
+                        dst[x] =
+                            alpha == 0
+                                ? (byte)0
+                                : (byte)1;
                     }
                 }
             }
+            finally
+            {
+                source.UnlockBits(sourceData);
+                result.UnlockBits(destinationData);
+            }
 
-            return bmp;
+            return result;
         }
+
+        #endregion
+
+        #region ICO
+
+        private void SaveIco(
+            Bitmap source,
+            Stream targetStream)
+        {
+            int maxSize =
+                Math.Min(
+                    Math.Min(
+                        source.Width,
+                        source.Height),
+                    256);
+
+            int size =
+                Math.Max(
+                    1,
+                    Math.Min(
+                        256,
+                        maxSize));
+
+            using Bitmap iconBitmap =
+                new Bitmap(
+                    size,
+                    size,
+                    PixelFormat.Format32bppArgb);
+
+            using Graphics g =
+                Graphics.FromImage(iconBitmap);
+
+            g.Clear(Color.Transparent);
+
+            g.InterpolationMode =
+                System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+
+            g.PixelOffsetMode =
+                System.Drawing.Drawing2D.PixelOffsetMode.Half;
+
+            g.DrawImage(
+                source,
+                new Rectangle(
+                    0,
+                    0,
+                    size,
+                    size));
+
+            IntPtr hIcon =
+                iconBitmap.GetHicon();
+
+            try
+            {
+                using Icon icon =
+                    Icon.FromHandle(hIcon);
+
+                icon.Save(targetStream);
+            }
+            finally
+            {
+                DestroyIcon(hIcon);
+            }
+        }
+
+        [DllImport(
+            "user32.dll",
+            CharSet = CharSet.Auto)]
+        private static extern bool DestroyIcon(
+            IntPtr handle);
+
+        #endregion
+
+        #region SVG Character
 
         private string GenerateSVG(
             byte[,] matrix,
             int scale)
         {
-            int width = 8 * scale;
-            int height = 16 * scale;
+            int width =
+                FontWidth * scale;
 
-            string hexText =
-                ColorToHex(textColor);
-
-            string hexBg =
-                ColorToHex(backgroundColor);
+            int height =
+                FontHeight * scale;
 
             StringBuilder sb =
                 new StringBuilder();
 
             sb.AppendLine(
                 $"<svg xmlns=\"http://www.w3.org/2000/svg\" " +
-                $"width=\"{width}\" height=\"{height}\" " +
+                $"width=\"{width}\" " +
+                $"height=\"{height}\" " +
                 $"viewBox=\"0 0 {width} {height}\">");
 
             if (!transparentBackground)
             {
                 sb.AppendLine(
-                    $"  <rect width=\"100%\" height=\"100%\" fill=\"{hexBg}\" />");
+                    $"  <rect width=\"100%\" " +
+                    $"height=\"100%\" " +
+                    $"fill=\"{ColorToHex(backgroundColor)}\" />");
             }
 
-            for (int r = 0; r < 16; r++)
+            for (int row = 0;
+                 row < FontHeight;
+                 row++)
             {
-                for (int col = 0; col < 8; col++)
+                for (int col = 0;
+                     col < FontWidth;
+                     col++)
                 {
-                    if (matrix[r, col] == 1)
-                    {
-                        int x = col * scale;
-                        int y = r * scale;
+                    if (matrix[row, col] != 1)
+                        continue;
 
-                        sb.AppendLine(
-                            $"  <rect x=\"{x}\" y=\"{y}\" " +
-                            $"width=\"{scale}\" height=\"{scale}\" " +
-                            $"fill=\"{hexText}\" />");
-                    }
+                    int x = col * scale;
+                    int y = row * scale;
+
+                    sb.AppendLine(
+                        $"  <rect x=\"{x}\" y=\"{y}\" " +
+                        $"width=\"{scale}\" " +
+                        $"height=\"{scale}\" " +
+                        $"fill=\"{ColorToHex(textColor)}\" />");
                 }
             }
 
@@ -1018,12 +1760,132 @@ namespace BitmapFontApp
             return sb.ToString();
         }
 
+        #endregion
+
+        #region SVG Canvas
+
+        private string GenerateCanvasSVG(
+            string text,
+            int scale)
+        {
+            Size size =
+                CalculateCanvasSize(text);
+
+            StringBuilder sb =
+                new StringBuilder();
+
+            sb.AppendLine(
+                $"<svg xmlns=\"http://www.w3.org/2000/svg\" " +
+                $"width=\"{size.Width}\" " +
+                $"height=\"{size.Height}\" " +
+                $"viewBox=\"0 0 {size.Width} {size.Height}\">");
+
+            if (!transparentBackground)
+            {
+                sb.AppendLine(
+                    $"  <rect width=\"100%\" " +
+                    $"height=\"100%\" " +
+                    $"fill=\"{ColorToHex(backgroundColor)}\" />");
+            }
+
+            int currentX =
+                CanvasPadding;
+
+            int currentY =
+                CanvasPadding;
+
+            int charWidth =
+                FontWidth * scale;
+
+            int charHeight =
+                FontHeight * scale;
+
+            int spacing =
+                CharacterSpacing * scale;
+
+            string textHex =
+                ColorToHex(textColor);
+
+            foreach (char c in text)
+            {
+                if (c == '\r')
+                    continue;
+
+                if (c == '\n')
+                {
+                    currentX =
+                        CanvasPadding;
+
+                    currentY +=
+                        charHeight +
+                        5 * scale;
+
+                    continue;
+                }
+
+                if (c == ' ')
+                {
+                    currentX +=
+                        charWidth + spacing;
+
+                    continue;
+                }
+
+                byte[,] matrix =
+                    PixelFont.GetCharacter(c);
+
+                if (matrix != null)
+                {
+                    for (int row = 0;
+                         row < FontHeight;
+                         row++)
+                    {
+                        for (int col = 0;
+                             col < FontWidth;
+                             col++)
+                        {
+                            if (matrix[row, col] != 1)
+                                continue;
+
+                            int x =
+                                currentX +
+                                col * scale;
+
+                            int y =
+                                currentY +
+                                row * scale;
+
+                            sb.AppendLine(
+                                $"  <rect x=\"{x}\" y=\"{y}\" " +
+                                $"width=\"{scale}\" " +
+                                $"height=\"{scale}\" " +
+                                $"fill=\"{textHex}\" />");
+                        }
+                    }
+                }
+
+                currentX +=
+                    charWidth + spacing;
+            }
+
+            sb.AppendLine("</svg>");
+
+            return sb.ToString();
+        }
+
+        #endregion
+
+        #region EPS
+
         private string GenerateEPS(
             byte[,] matrix,
             int scale)
         {
-            int width = 8 * scale;
-            int height = 16 * scale;
+            int width =
+                FontWidth * scale;
+
+            int height =
+                FontHeight * scale;
 
             StringBuilder sb =
                 new StringBuilder();
@@ -1034,50 +1896,202 @@ namespace BitmapFontApp
             sb.AppendLine(
                 $"%%BoundingBox: 0 0 {width} {height}");
 
-            sb.AppendLine("%%EndComments");
+            sb.AppendLine(
+                "%%LanguageLevel: 2");
+
+            sb.AppendLine(
+                "%%EndComments");
 
             if (!transparentBackground)
             {
-                sb.AppendLine(
-                    $"{backgroundColor.R / 255.0} " +
-                    $"{backgroundColor.G / 255.0} " +
-                    $"{backgroundColor.B / 255.0} setrgbcolor");
+                AppendEPSColor(
+                    sb,
+                    backgroundColor);
 
                 sb.AppendLine(
                     $"0 0 {width} {height} rectfill");
             }
 
-            sb.AppendLine(
-                $"{textColor.R / 255.0} " +
-                $"{textColor.G / 255.0} " +
-                $"{textColor.B / 255.0} setrgbcolor");
+            AppendEPSColor(
+                sb,
+                textColor);
 
-            for (int r = 0; r < 16; r++)
+            for (int row = 0;
+                 row < FontHeight;
+                 row++)
             {
-                for (int col = 0; col < 8; col++)
+                for (int col = 0;
+                     col < FontWidth;
+                     col++)
                 {
-                    if (matrix[r, col] == 1)
-                    {
-                        int x = col * scale;
-                        int y =
-                            height -
-                            ((r + 1) * scale);
+                    if (matrix[row, col] != 1)
+                        continue;
 
-                        sb.AppendLine(
-                            $"{x} {y} {scale} {scale} rectfill");
-                    }
+                    int x =
+                        col * scale;
+
+                    int y =
+                        height -
+                        ((row + 1) * scale);
+
+                    sb.AppendLine(
+                        $"{x} {y} {scale} {scale} rectfill");
                 }
             }
 
+            sb.AppendLine("showpage");
+            sb.AppendLine("%%EOF");
+
             return sb.ToString();
         }
+
+        private void AppendEPSColor(
+            StringBuilder sb,
+            Color color)
+        {
+            sb.AppendLine(
+                $"{color.R / 255.0:0.######} " +
+                $"{color.G / 255.0:0.######} " +
+                $"{color.B / 255.0:0.######} " +
+                "setrgbcolor");
+        }
+
+        #endregion
+
+        #region EPS Canvas
+
+        private string GenerateCanvasEPS(
+            string text,
+            int scale)
+        {
+            Size size =
+                CalculateCanvasSize(text);
+
+            StringBuilder sb =
+                new StringBuilder();
+
+            sb.AppendLine(
+                "%!PS-Adobe-3.0 EPSF-3.0");
+
+            sb.AppendLine(
+                $"%%BoundingBox: 0 0 " +
+                $"{size.Width} {size.Height}");
+
+            sb.AppendLine(
+                "%%LanguageLevel: 2");
+
+            sb.AppendLine(
+                "%%EndComments");
+
+            if (!transparentBackground)
+            {
+                AppendEPSColor(
+                    sb,
+                    backgroundColor);
+
+                sb.AppendLine(
+                    $"0 0 {size.Width} {size.Height} rectfill");
+            }
+
+            AppendEPSColor(
+                sb,
+                textColor);
+
+            int currentX =
+                CanvasPadding;
+
+            int currentY =
+                CanvasPadding;
+
+            int charWidth =
+                FontWidth * scale;
+
+            int charHeight =
+                FontHeight * scale;
+
+            int spacing =
+                CharacterSpacing * scale;
+
+            foreach (char c in text)
+            {
+                if (c == '\r')
+                    continue;
+
+                if (c == '\n')
+                {
+                    currentX =
+                        CanvasPadding;
+
+                    currentY +=
+                        charHeight +
+                        5 * scale;
+
+                    continue;
+                }
+
+                if (c == ' ')
+                {
+                    currentX +=
+                        charWidth + spacing;
+
+                    continue;
+                }
+
+                byte[,] matrix =
+                    PixelFont.GetCharacter(c);
+
+                if (matrix != null)
+                {
+                    for (int row = 0;
+                         row < FontHeight;
+                         row++)
+                    {
+                        for (int col = 0;
+                             col < FontWidth;
+                             col++)
+                        {
+                            if (matrix[row, col] != 1)
+                                continue;
+
+                            int x =
+                                currentX +
+                                col * scale;
+
+                            int y =
+                                size.Height -
+                                currentY -
+                                ((row + 1) * scale);
+
+                            sb.AppendLine(
+                                $"{x} {y} " +
+                                $"{scale} {scale} rectfill");
+                        }
+                    }
+                }
+
+                currentX +=
+                    charWidth + spacing;
+            }
+
+            sb.AppendLine("showpage");
+            sb.AppendLine("%%EOF");
+
+            return sb.ToString();
+        }
+
+        #endregion
+
+        #region XBM
 
         private string GenerateXBM(
             byte[,] matrix,
             int scale)
         {
-            int width = 8 * scale;
-            int height = 16 * scale;
+            int width =
+                FontWidth * scale;
+
+            int height =
+                FontHeight * scale;
 
             StringBuilder sb =
                 new StringBuilder();
@@ -1091,319 +2105,56 @@ namespace BitmapFontApp
             sb.AppendLine(
                 "static unsigned char char_bits[] = {");
 
-            List<string> bytesHex =
+            List<string> bytes =
                 new List<string>();
 
-            for (int r = 0; r < height; r++)
+            for (int y = 0;
+                 y < height;
+                 y++)
             {
-                int origR = r / scale;
+                int originalRow =
+                    y / scale;
 
-                for (int cGroup = 0;
-                     cGroup < width;
-                     cGroup += 8)
+                for (int xGroup = 0;
+                     xGroup < width;
+                     xGroup += 8)
                 {
-                    byte b = 0;
+                    byte value = 0;
 
-                    for (int bit = 0; bit < 8; bit++)
+                    for (int bit = 0;
+                         bit < 8;
+                         bit++)
                     {
-                        int currentX =
-                            cGroup + bit;
+                        int x =
+                            xGroup + bit;
 
-                        if (currentX >= width)
+                        if (x >= width)
                             continue;
 
-                        int origCol =
-                            currentX / scale;
+                        int originalCol =
+                            x / scale;
 
-                        if (origCol < 8 &&
-                            matrix[origR, origCol] == 1)
+                        if (matrix[
+                                originalRow,
+                                originalCol] == 1)
                         {
-                            b |=
+                            value |=
                                 (byte)(1 << bit);
                         }
                     }
 
-                    bytesHex.Add(
-                        $"0x{b:X2}");
+                    bytes.Add(
+                        $"0x{value:X2}");
                 }
             }
 
             sb.AppendLine(
-                "  " + string.Join(
+                "  " +
+                string.Join(
                     ", ",
-                    bytesHex));
+                    bytes));
 
             sb.AppendLine("};");
-
-            return sb.ToString();
-        }
-
-        private Bitmap RenderCanvasBitmap(
-            string text,
-            int scale)
-        {
-            int charWidth = 8 * scale;
-            int charHeight = 16 * scale;
-            int spacing = 2 * scale;
-            int padding = 10;
-
-            int totalWidth =
-                Math.Max(
-                    1,
-                    (text.Length *
-                        (charWidth + spacing)) +
-                    (padding * 2));
-
-            int totalHeight =
-                charHeight +
-                (padding * 2);
-
-            Bitmap bmp =
-                new Bitmap(
-                    totalWidth,
-                    totalHeight,
-                    PixelFormat.Format32bppArgb);
-
-            using (Graphics g =
-                Graphics.FromImage(bmp))
-            {
-                g.Clear(
-                    transparentBackground
-                        ? Color.Transparent
-                        : backgroundColor);
-
-                int currentX = padding;
-                int currentY = padding;
-
-                using (Brush pixelBrush =
-                    new SolidBrush(textColor))
-                {
-                    foreach (char c in text)
-                    {
-                        if (c == ' ')
-                        {
-                            currentX +=
-                                charWidth + spacing;
-
-                            continue;
-                        }
-
-                        byte[,] matrix =
-                            PixelFont.GetCharacter(c);
-
-                        if (matrix != null)
-                        {
-                            for (int r = 0; r < 16; r++)
-                            {
-                                for (int col = 0; col < 8; col++)
-                                {
-                                    if (matrix[r, col] == 1)
-                                    {
-                                        g.FillRectangle(
-                                            pixelBrush,
-                                            currentX +
-                                                (col * scale),
-                                            currentY +
-                                                (r * scale),
-                                            scale,
-                                            scale);
-                                    }
-                                }
-                            }
-                        }
-
-                        currentX +=
-                            charWidth + spacing;
-                    }
-                }
-            }
-
-            return bmp;
-        }
-
-        private string GenerateCanvasSVG(
-            string text,
-            int scale)
-        {
-            int charWidth = 8 * scale;
-            int charHeight = 16 * scale;
-            int spacing = 2 * scale;
-            int padding = 10;
-
-            int totalWidth =
-                Math.Max(
-                    1,
-                    (text.Length *
-                        (charWidth + spacing)) +
-                    (padding * 2));
-
-            int totalHeight =
-                charHeight +
-                (padding * 2);
-
-            string hexText =
-                ColorToHex(textColor);
-
-            string hexBg =
-                ColorToHex(backgroundColor);
-
-            StringBuilder sb =
-                new StringBuilder();
-
-            sb.AppendLine(
-                $"<svg xmlns=\"http://www.w3.org/2000/svg\" " +
-                $"width=\"{totalWidth}\" " +
-                $"height=\"{totalHeight}\" " +
-                $"viewBox=\"0 0 {totalWidth} {totalHeight}\">");
-
-            if (!transparentBackground)
-            {
-                sb.AppendLine(
-                    $"  <rect width=\"100%\" height=\"100%\" fill=\"{hexBg}\" />");
-            }
-
-            int currentX = padding;
-            int currentY = padding;
-
-            foreach (char c in text)
-            {
-                if (c == ' ')
-                {
-                    currentX +=
-                        charWidth + spacing;
-
-                    continue;
-                }
-
-                byte[,] matrix =
-                    PixelFont.GetCharacter(c);
-
-                if (matrix != null)
-                {
-                    for (int r = 0; r < 16; r++)
-                    {
-                        for (int col = 0; col < 8; col++)
-                        {
-                            if (matrix[r, col] == 1)
-                            {
-                                int x =
-                                    currentX +
-                                    (col * scale);
-
-                                int y =
-                                    currentY +
-                                    (r * scale);
-
-                                sb.AppendLine(
-                                    $"  <rect x=\"{x}\" y=\"{y}\" " +
-                                    $"width=\"{scale}\" " +
-                                    $"height=\"{scale}\" " +
-                                    $"fill=\"{hexText}\" />");
-                            }
-                        }
-                    }
-                }
-
-                currentX +=
-                    charWidth + spacing;
-            }
-
-            sb.AppendLine("</svg>");
-
-            return sb.ToString();
-        }
-
-        private string GenerateCanvasEPS(
-            string text,
-            int scale)
-        {
-            int charWidth = 8 * scale;
-            int charHeight = 16 * scale;
-            int spacing = 2 * scale;
-            int padding = 10;
-
-            int totalWidth =
-                Math.Max(
-                    1,
-                    (text.Length *
-                        (charWidth + spacing)) +
-                    (padding * 2));
-
-            int totalHeight =
-                charHeight +
-                (padding * 2);
-
-            StringBuilder sb =
-                new StringBuilder();
-
-            sb.AppendLine(
-                "%!PS-Adobe-3.0 EPSF-3.0");
-
-            sb.AppendLine(
-                $"%%BoundingBox: 0 0 {totalWidth} {totalHeight}");
-
-            sb.AppendLine("%%EndComments");
-
-            if (!transparentBackground)
-            {
-                sb.AppendLine(
-                    $"{backgroundColor.R / 255.0} " +
-                    $"{backgroundColor.G / 255.0} " +
-                    $"{backgroundColor.B / 255.0} setrgbcolor");
-
-                sb.AppendLine(
-                    $"0 0 {totalWidth} {totalHeight} rectfill");
-            }
-
-            sb.AppendLine(
-                $"{textColor.R / 255.0} " +
-                $"{textColor.G / 255.0} " +
-                $"{textColor.B / 255.0} setrgbcolor");
-
-            int currentX = padding;
-            int currentY = padding;
-
-            foreach (char c in text)
-            {
-                if (c == ' ')
-                {
-                    currentX +=
-                        charWidth + spacing;
-
-                    continue;
-                }
-
-                byte[,] matrix =
-                    PixelFont.GetCharacter(c);
-
-                if (matrix != null)
-                {
-                    for (int r = 0; r < 16; r++)
-                    {
-                        for (int col = 0; col < 8; col++)
-                        {
-                            if (matrix[r, col] == 1)
-                            {
-                                int x =
-                                    currentX +
-                                    (col * scale);
-
-                                int y =
-                                    totalHeight -
-                                    (currentY +
-                                     ((r + 1) * scale));
-
-                                sb.AppendLine(
-                                    $"{x} {y} " +
-                                    $"{scale} {scale} rectfill");
-                            }
-                        }
-                    }
-                }
-
-                currentX +=
-                    charWidth + spacing;
-            }
 
             return sb.ToString();
         }
@@ -1412,230 +2163,212 @@ namespace BitmapFontApp
             string text,
             int scale)
         {
-            using (Bitmap bmp =
-                RenderCanvasBitmap(text, scale))
+            Size size =
+                CalculateCanvasSize(text);
+
+            StringBuilder sb =
+                new StringBuilder();
+
+            sb.AppendLine(
+                $"#define canvas_width {size.Width}");
+
+            sb.AppendLine(
+                $"#define canvas_height {size.Height}");
+
+            sb.AppendLine(
+                "static unsigned char canvas_bits[] = {");
+
+            List<string> bytes =
+                new List<string>();
+
+            bool[,] pixels =
+                BuildCanvasPixelMask(
+                    text,
+                    scale,
+                    size);
+
+            for (int y = 0;
+                 y < size.Height;
+                 y++)
             {
-                StringBuilder sb =
-                    new StringBuilder();
-
-                sb.AppendLine(
-                    $"#define canvas_width {bmp.Width}");
-
-                sb.AppendLine(
-                    $"#define canvas_height {bmp.Height}");
-
-                sb.AppendLine(
-                    "static unsigned char canvas_bits[] = {");
-
-                List<string> bytesHex =
-                    new List<string>();
-
-                for (int y = 0; y < bmp.Height; y++)
+                for (int xGroup = 0;
+                     xGroup < size.Width;
+                     xGroup += 8)
                 {
-                    for (int xGroup = 0;
-                         xGroup < bmp.Width;
-                         xGroup += 8)
+                    byte value = 0;
+
+                    for (int bit = 0;
+                         bit < 8;
+                         bit++)
                     {
-                        byte b = 0;
+                        int x =
+                            xGroup + bit;
 
-                        for (int bit = 0; bit < 8; bit++)
+                        if (x >= size.Width)
+                            continue;
+
+                        if (pixels[y, x])
                         {
-                            int px =
-                                xGroup + bit;
-
-                            if (px >= bmp.Width)
-                                continue;
-
-                            Color pixel =
-                                bmp.GetPixel(px, y);
-
-                            bool isPixelSet;
-
-                            if (transparentBackground)
-                            {
-                                isPixelSet =
-                                    pixel.A > 0 &&
-                                    pixel.R == textColor.R &&
-                                    pixel.G == textColor.G &&
-                                    pixel.B == textColor.B;
-                            }
-                            else
-                            {
-                                isPixelSet =
-                                    pixel.ToArgb() !=
-                                    backgroundColor.ToArgb();
-                            }
-
-                            if (isPixelSet)
-                            {
-                                b |=
-                                    (byte)(1 << bit);
-                            }
+                            value |=
+                                (byte)(1 << bit);
                         }
-
-                        bytesHex.Add(
-                            $"0x{b:X2}");
                     }
+
+                    bytes.Add(
+                        $"0x{value:X2}");
                 }
-
-                sb.AppendLine(
-                    "  " + string.Join(
-                        ", ",
-                        bytesHex));
-
-                sb.AppendLine("};");
-
-                return sb.ToString();
             }
+
+            sb.AppendLine(
+                "  " +
+                string.Join(
+                    ", ",
+                    bytes));
+
+            sb.AppendLine("};");
+
+            return sb.ToString();
         }
 
-        private void PanelCanvas_Paint(
-            object sender,
-            PaintEventArgs e)
+        private bool[,] BuildCanvasPixelMask(
+            string text,
+            int scale,
+            Size size)
         {
-            Graphics g = e.Graphics;
-            string textToDraw = txtInput.Text;
+            bool[,] pixels =
+                new bool[
+                    size.Height,
+                    size.Width];
 
-            int startX = 15;
-            int startY = 45;
+            int currentX =
+                CanvasPadding;
 
-            int currentX = startX;
-            int currentY = startY;
+            int currentY =
+                CanvasPadding;
 
             int charWidth =
-                8 * pixelSize;
+                FontWidth * scale;
 
             int charHeight =
-                16 * pixelSize;
+                FontHeight * scale;
 
             int spacing =
-                2 * pixelSize;
+                CharacterSpacing * scale;
 
-            using (Brush pixelBrush =
-                new SolidBrush(textColor))
+            foreach (char c in text)
             {
-                foreach (char c in textToDraw)
+                if (c == '\r')
+                    continue;
+
+                if (c == '\n')
                 {
-                    if (c == ' ')
+                    currentX =
+                        CanvasPadding;
+
+                    currentY +=
+                        charHeight +
+                        5 * scale;
+
+                    continue;
+                }
+
+                if (c == ' ')
+                {
+                    currentX +=
+                        charWidth + spacing;
+
+                    continue;
+                }
+
+                byte[,] matrix =
+                    PixelFont.GetCharacter(c);
+
+                if (matrix != null)
+                {
+                    for (int row = 0;
+                         row < FontHeight;
+                         row++)
                     {
-                        currentX +=
-                            charWidth + spacing;
-
-                        continue;
-                    }
-
-                    byte[,] matrix =
-                        PixelFont.GetCharacter(c);
-
-                    if (matrix != null)
-                    {
-                        for (int r = 0; r < 16; r++)
+                        for (int col = 0;
+                             col < FontWidth;
+                             col++)
                         {
-                            for (int col = 0; col < 8; col++)
+                            if (matrix[row, col] != 1)
+                                continue;
+
+                            for (int py = 0;
+                                 py < scale;
+                                 py++)
                             {
-                                if (matrix[r, col] == 1)
+                                for (int px = 0;
+                                     px < scale;
+                                     px++)
                                 {
-                                    g.FillRectangle(
-                                        pixelBrush,
+                                    int x =
                                         currentX +
-                                            (col * pixelSize),
+                                        col * scale +
+                                        px;
+
+                                    int y =
                                         currentY +
-                                            (r * pixelSize),
-                                        pixelSize,
-                                        pixelSize);
+                                        row * scale +
+                                        py;
+
+                                    if (x >= 0 &&
+                                        x < size.Width &&
+                                        y >= 0 &&
+                                        y < size.Height)
+                                    {
+                                        pixels[y, x] =
+                                            true;
+                                    }
                                 }
                             }
                         }
                     }
-
-                    currentX +=
-                        charWidth + spacing;
-
-                    if (currentX >
-                        panelCanvas.Width - charWidth)
-                    {
-                        currentX = startX;
-                        currentY +=
-                            charHeight + 5;
-                    }
                 }
+
+                currentX +=
+                    charWidth + spacing;
             }
+
+            return pixels;
         }
 
-        private ImageFormat GetImageFormat(
-            string ext)
+        #endregion
+
+        #region Helpers
+
+        private string ColorToHex(Color color)
         {
-            switch (ext.ToLowerInvariant())
-            {
-                case "jpg":
-                case "jpeg":
-                    return ImageFormat.Jpeg;
-
-                case "bmp":
-                    return ImageFormat.Bmp;
-
-                case "gif":
-                    return ImageFormat.Gif;
-
-                case "tiff":
-                    return ImageFormat.Tiff;
-
-                case "ico":
-                    return ImageFormat.Icon;
-
-                case "png":
-                default:
-                    return ImageFormat.Png;
-            }
-        }
-
-        private string ColorToHex(Color c)
-        {
-            return $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+            return
+                $"#{color.R:X2}" +
+                $"{color.G:X2}" +
+                $"{color.B:X2}";
         }
 
         private string GetSafeFileName(char c)
         {
-            switch (c)
+            return c switch
             {
-                case '/':
-                    return "slash";
+                '/' => "slash",
+                '\\' => "backslash",
+                ':' => "colon",
+                '*' => "asterisk",
+                '?' => "question",
+                '"' => "quote",
+                '<' => "less",
+                '>' => "greater",
+                '|' => "pipe",
+                ' ' => "space",
+                '.' => "dot",
 
-                case '\\':
-                    return "backslash";
-
-                case ':':
-                    return "colon";
-
-                case '*':
-                    return "asterisk";
-
-                case '?':
-                    return "question";
-
-                case '"':
-                    return "quote";
-
-                case '<':
-                    return "less";
-
-                case '>':
-                    return "greater";
-
-                case '|':
-                    return "pipe";
-
-                case ' ':
-                    return "space";
-
-                case '.':
-                    return "dot";
-
-                default:
-                    return char.IsLetterOrDigit(c)
-                        ? c.ToString()
-                        : $"symbol_{(int)c}";
-            }
+                _ => char.IsLetterOrDigit(c)
+                    ? c.ToString()
+                    : $"symbol_{(int)c}"
+            };
         }
+
+        #endregion
     }
 }
